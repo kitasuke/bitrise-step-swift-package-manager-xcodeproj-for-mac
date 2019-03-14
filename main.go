@@ -3,29 +3,132 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
+	"strings"
+
+	"github.com/bitrise-io/go-utils/log"
+	"github.com/kitasuke/go-swift/swift"
+	"github.com/kitasuke/go-swift/utility"
 )
 
-func main() {
-	fmt.Println("This is the value specified for the input 'example_step_input':", os.Getenv("example_step_input"))
+const (
+	OutputEnvKey             = "output"
+	EnableCodeCoverageEnvKey = "enable_code_coverage"
+	XcconfigOverridesEnvKey  = "xcconfig_overrides"
+)
 
-	//
-	// --- Step Outputs: Export Environment Variables for other Steps:
-	// You can export Environment Variables for other Steps with
-	//  envman, which is automatically installed by `bitrise setup`.
-	// A very simple example:
-	cmdLog, err := exec.Command("bitrise", "envman", "add", "--key", "EXAMPLE_STEP_OUTPUT", "--value", "the value you want to share").CombinedOutput()
-	if err != nil {
-		fmt.Printf("Failed to expose output with envman, error: %#v | output: %s", err, cmdLog)
-		os.Exit(1)
+// ConfigModel ...
+type ConfigModel struct {
+	// Project Parameters
+	output string
+
+	// Build Run Configs
+	enableCodeCoverage string
+	xcconfigOverrides  string
+}
+
+func (configs ConfigModel) print() {
+	fmt.Println()
+
+	log.Infof("Project Parameters:")
+	log.Printf("- Output: %s", configs.output)
+
+	fmt.Println()
+	log.Infof("Build Run Configs:")
+	log.Printf("- EnableCodeCoverage: %s", configs.enableCodeCoverage)
+	log.Printf("- XcconfigOverrides: %s", configs.xcconfigOverrides)
+}
+
+func createConfigsModelFromEnvs() ConfigModel {
+	return ConfigModel{
+		// Project Parameters
+		output: os.Getenv(OutputEnvKey),
+
+		// Configs
+		enableCodeCoverage: os.Getenv(EnableCodeCoverageEnvKey),
+		xcconfigOverrides:  os.Getenv(XcconfigOverridesEnvKey),
 	}
-	// You can find more usage examples on envman's GitHub page
-	//  at: https://github.com/bitrise-io/envman
+}
 
-	//
-	// --- Exit codes:
-	// The exit code of your Step is very important. If you return
-	//  with a 0 exit code `bitrise` will register your Step as "successful".
-	// Any non zero exit code will be registered as "failed" by `bitrise`.
-	os.Exit(0)
+func (configs ConfigModel) validate() error {
+	if err := validateRequiredInputWithOptions(configs.enableCodeCoverage, EnableCodeCoverageEnvKey, []string{"yes", "no"}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//--------------------
+// Functions
+//--------------------
+
+func validateRequiredInput(value, key string) error {
+	if value == "" {
+		return fmt.Errorf("Missing required input: %s", key)
+	}
+	return nil
+}
+
+func validateRequiredInputWithOptions(value, key string, options []string) error {
+	if err := validateRequiredInput(value, key); err != nil {
+		return err
+	}
+
+	found := false
+	for _, option := range options {
+		if option == value {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("Invalid input: (%s) value: (%s), valid options: %s", key, value, strings.Join(options, ", "))
+	}
+
+	return nil
+}
+
+func failf(format string, v ...interface{}) {
+	log.Errorf(format, v...)
+	os.Exit(1)
+}
+
+//--------------------
+// Main
+//--------------------
+
+func main() {
+	configs := createConfigsModelFromEnvs()
+	configs.print()
+	if err := configs.validate(); err != nil {
+		failf("Issue with input: %s", err)
+	}
+
+	fmt.Println()
+	log.Infof("Other Configs:")
+
+	enableCodeCoverage := configs.enableCodeCoverage == "yes"
+
+	swiftVersion, err := utility.GetSwiftVersion()
+	if err != nil {
+		failf("Failed to get the version of swift! Error: %s", err)
+	}
+
+	log.Printf("* swift_version: %s (%s)", swiftVersion.Version, swiftVersion.Target)
+
+	fmt.Println()
+
+	// setup CommandModel for test
+	generateCommandModel := swift.NewGenerateXcodeprojCommand()
+	generateCommandModel.SetOutput(configs.output)
+	generateCommandModel.SetEnableCodeCoverage(enableCodeCoverage)
+	if configs.xcconfigOverrides != "" {
+		generateCommandModel.SetXcconfigOverridesPath(configs.xcconfigOverrides)
+	}
+
+	log.Infof("$ %s\n", generateCommandModel.PrintableCmd())
+
+	if err := generateCommandModel.Run(); err != nil {
+		failf("Generate Xcodeproj failed, error: %s", err)
+	}
 }
