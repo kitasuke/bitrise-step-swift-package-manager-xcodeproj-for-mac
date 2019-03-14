@@ -60,7 +60,6 @@ inputs:
         Path where the Xcode project should be generated
       is_expand: true
       is_required: false
-      value_options: []
   - enable_code_coverage: "no"
     opts:
       title: Enable code coverage
@@ -76,4 +75,3 @@ inputs:
         Path to xcconfig file to override
       is_expand: true
       is_required: false
-      value_options: []
