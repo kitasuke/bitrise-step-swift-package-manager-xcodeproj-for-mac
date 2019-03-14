@@ -69,7 +69,7 @@ inputs:
       value_options:
         - "yes"
         - "no"
-  - xcconfig_overrides:
+  - xcconfig_overrides: ""
     opts:
       title: Path to xcconfig file
       description: |
