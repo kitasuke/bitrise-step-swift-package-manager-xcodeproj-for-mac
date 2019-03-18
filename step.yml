@@ -59,7 +59,7 @@ inputs:
       description: |
         Path where the Xcode project should be generated
       is_expand: true
-      is_required: false
+      is_required: true
   - enable_code_coverage: "no"
     opts:
       title: Enable code coverage
